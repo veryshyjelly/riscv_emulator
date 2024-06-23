@@ -1,11 +1,11 @@
 use crate::chips::dff::DFF;
 use crate::chips::{mux2, wire, Chip, Wire, ONE, U32};
 
-pub struct Decode {
-    input: Wire<U32>,
-    pub output: Wire<Instruction>,
+pub struct Decode<T = U32> {
+    pub input: Wire<T>,
+    pub output: Wire<Instruction<T>>,
     // out stores the result of the current operation and transfers it to output at clk
-    out: DFF<Instruction>,
+    out: DFF<Instruction<T>>,
 }
 
 impl Decode {

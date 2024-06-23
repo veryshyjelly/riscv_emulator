@@ -6,9 +6,9 @@ use crate::chips::{mux2, wire, Chip, Wire, ONE, U32, ZERO};
 use std::num::Wrapping;
 
 pub struct Execute<T = U32> {
-    input: Wire<Instruction<T>>,
+    pub input: Wire<Instruction<T>>,
     pub output: Wire<IOCode<T>>,
-    reg_file: Wire<RegFile<T>>,
+    pub reg_file: Wire<RegFile<T>>,
     pc: Wire<PC<T>>,
     out: DFF<IOCode<T>>, // stores the value before outputting it
     rd: U32,             // this is the affected register value is stored to target it at clk
@@ -33,6 +33,7 @@ impl Execute {
             output: output.clone(),
             reg_file,
             pc,
+            // connect the dff's output to execute's output interface
             out: DFF::new(wire(IOCode::default()), output),
             rd: ZERO,
         }
@@ -163,12 +164,26 @@ fn alu(funct3: U32, funct7: U32, rs1: U32, shamt: U32, imm: U32) -> Option<U32> 
             0b111 => rs1 & imm,                                        // AND
             _ => None?,
         }
-    } else {
+    } else if funct7.0 == 0b0100000 {
         match funct3.0 {
             0b000 => rs1 - imm,                                    // SUB
             0b101 => Wrapping(((rs1.0 as i32) >> shamt.0) as u32), // SRA
             _ => None?,
         }
+    } else if funct7.0 == 0b0000001 {
+        match funct3.0 {
+            0b000 => rs1 * imm, // MUL
+            0b001 => Wrapping(((((rs1.0 as i32) as i64) * ((imm.0 as i32) as i64)) >> 32) as u32), // MULH
+            0b010 => Wrapping(((((rs1.0 as i32) as i64) * (imm.0 as i64)) >> 32) as u32), // MULHSU
+            0b011 => Wrapping((((rs1.0 as i64) * (imm.0 as i64)) >> 32) as u32), // MULHU
+            0b100 => Wrapping(((rs1.0 as i32) / (imm.0 as i32)) as u32), // DIV
+            0b101 => rs1 / imm,                          // DIVU
+            0b110 => Wrapping(((rs1.0 as i32) % (imm.0 as i32)) as u32), // REM
+            0b111 => rs1 % imm, // REMU
+            _ => None?,
+        }
+    } else {
+        panic!("not recognized {funct7}")
     };
     Some(result)
 }

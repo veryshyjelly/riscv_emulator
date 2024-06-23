@@ -1,6 +1,5 @@
 use crate::chips::register::Register;
 use crate::chips::{wire, Chip, Wire, ONE, U32, ZERO};
-use std::num::Wrapping;
 
 #[derive(Clone)]
 pub struct PC<T = U32> {
@@ -26,7 +25,8 @@ impl PC {
             load,
             inc,
             output: output.clone(),
-            register: Register::new(wire(Wrapping(0)), output, wire(true)),
+            // connect the output of the register to pc's output
+            register: Register::new(wire(ZERO), output, wire(true)),
         }
     }
 }
@@ -48,6 +48,7 @@ impl Chip for PC {
     }
 
     fn clk(&mut self) {
+        // this load should automatically get false
         *self.load.borrow_mut() = false;
         self.register.clk()
     }

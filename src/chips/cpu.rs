@@ -8,11 +8,11 @@ use crate::chips::register_file::RegFile;
 use crate::chips::rom::ROM;
 use crate::chips::{wire, Chip, Wire, U32, ZERO};
 
-pub struct CPU {
-    fetch: Fetch,
-    decode: Decode,
-    execute: Execute,
-    memory_access: MemoryAccess,
+pub struct CPU<T = U32> {
+    pub fetch: Fetch<T>,
+    pub decode: Decode<T>,
+    pub execute: Execute<T>,
+    pub memory_access: MemoryAccess<T>,
     pc: Wire<PC>,
 }
 

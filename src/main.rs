@@ -12,10 +12,7 @@ fn main() {
 
     rom.load(
         [
-            0b000000000010_00000_000_00001_0010011,
-            0b000000000001_00001_000_00011_0010011,
-            0b000000_00001_00010_000_00100_0110011,
-            0b010000_00001_00010_000_00100_0110011,
+            0x00058a63, 0x02b572b3, 0x00058533, 0x000285b3, 0xfe0008e3, 0x7ca03823,
         ]
         .map(|x: u32| Wrapping(x))
         .into_iter()
@@ -24,8 +21,10 @@ fn main() {
 
     let mut cpu = CPU::new(ram, rom);
 
-    for _ in 1..10 {
+    for i in 1..10 {
         cpu.compute();
         cpu.clk();
+        println!("cycle: {i}");
+        cpu.memory_access.reg_file.borrow().print();
     }
 }

@@ -12,7 +12,7 @@ pub struct RegFile<T> {
 
 impl<T> RegFile<T>
 where
-    T: Clone + Default,
+    T: Clone + Default + Debug,
 {
     pub fn new(size: usize) -> Self {
         let mut registers = Vec::with_capacity(size);
@@ -28,11 +28,18 @@ where
         }
         &mut self.registers[index]
     }
+
+    pub fn print(&self) {
+        self.registers
+            .iter()
+            .enumerate()
+            .for_each(|(i, v)| println!("x{i}: {:?}", v.output.borrow().clone()));
+    }
 }
 
 impl<T> Chip for RegFile<T>
 where
-    T: Copy + Default + Debug,
+    T: Copy + Default,
 {
     fn compute(&mut self) {
         self.registers.iter_mut().for_each(|v| v.compute())
@@ -43,9 +50,5 @@ where
             v.clk();
             *v.load.borrow_mut() = false;
         });
-        self.registers
-            .iter()
-            .enumerate()
-            .for_each(|(i, v)| println!("x{i}: {:?}", v.output.borrow().clone()));
     }
 }

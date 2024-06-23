@@ -4,9 +4,9 @@ use crate::chips::register_file::RegFile;
 use crate::chips::{Chip, Wire, U32, ZERO};
 
 pub struct MemoryAccess<T = U32> {
-    input: Wire<IOCode>,
-    reg_file: Wire<RegFile<T>>,
-    ram: RAM<T>,
+    pub input: Wire<IOCode>,
+    pub reg_file: Wire<RegFile<T>>,
+    pub ram: RAM<T>,
     rd: U32,
 }
 
