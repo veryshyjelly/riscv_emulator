@@ -1,8 +1,5 @@
-// Values of register file can be accessed in the same clock
-// instead of second like ram
-
 use crate::chips::register::Register;
-use crate::chips::Chip;
+use crate::chips::{Chip};
 use std::fmt::Debug;
 
 #[derive(Clone)]
@@ -42,10 +39,12 @@ where
     T: Copy + Default,
 {
     fn compute(&mut self) {
+        // call compute on all the registers
         self.registers.iter_mut().for_each(|v| v.compute())
     }
 
     fn clk(&mut self) {
+        // clock all the registers and reset the load
         self.registers.iter_mut().for_each(|v| {
             v.clk();
             *v.load.borrow_mut() = false;

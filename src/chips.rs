@@ -34,6 +34,8 @@ pub type U32 = Wrapping<u32>;
 
 const ZERO: U32 = Wrapping(0);
 const ONE: U32 = Wrapping(1);
+const FOUR: U32 = Wrapping(4);
+const MAX: U32 = Wrapping(u32::MAX);
 
 fn mux2<T>(a: T, b: T, sel: bool) -> T {
     match sel {

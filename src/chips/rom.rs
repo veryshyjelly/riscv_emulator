@@ -31,6 +31,6 @@ impl Chip for ROM<U32> {
 
     fn clk(&mut self) {
         let addr = self.address.borrow().clone();
-        *self.output.borrow_mut() = self.registers[addr.0 as usize].clone();
+        *self.output.borrow_mut() = self.registers[addr.0 as usize / 4].clone();
     }
 }

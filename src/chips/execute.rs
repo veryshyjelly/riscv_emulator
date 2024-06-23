@@ -2,7 +2,7 @@ use crate::chips::decode::Instruction;
 use crate::chips::dff::DFF;
 use crate::chips::pc::PC;
 use crate::chips::register_file::RegFile;
-use crate::chips::{mux2, wire, Chip, Wire, ONE, U32, ZERO};
+use crate::chips::{mux2, wire, Chip, Wire, FOUR, MAX, ONE, U32, ZERO};
 use std::num::Wrapping;
 
 pub struct Execute<T = U32> {
@@ -92,14 +92,14 @@ impl Chip for Execute {
                 *self.pc.borrow_mut().load.borrow_mut() = true;
             }
             JAL => {
-                *rd.input.borrow_mut() = self.pc.borrow().output.borrow().clone() + Wrapping(4);
+                *rd.input.borrow_mut() = self.pc.borrow().output.borrow().clone() + FOUR;
                 *rd.load.borrow_mut() = true;
                 *self.pc.borrow_mut().input.borrow_mut() =
                     self.pc.borrow().output.borrow().clone() + instruction.imm_j;
                 *self.pc.borrow_mut().load.borrow_mut() = true;
             }
             JALR => {
-                *rd.input.borrow_mut() = self.pc.borrow().output.borrow().clone() + Wrapping(4);
+                *rd.input.borrow_mut() = self.pc.borrow().output.borrow().clone() + FOUR;
                 *rd.load.borrow_mut() = true;
                 *self.pc.borrow_mut().input.borrow_mut() = (rs1 + instruction.imm_i >> 1) << 1;
                 *self.pc.borrow_mut().load.borrow_mut() = true;
@@ -116,7 +116,7 @@ impl Chip for Execute {
                     0b111 => mux2(pc_addr, target_addr, rs1 >= rs2), // BGEU
                     _ => panic!("invalid instruction"),
                 };
-                if final_addr % Wrapping(4) != ZERO {
+                if final_addr % FOUR != ZERO {
                     panic!("address-misaligned")
                 }
                 *self.pc.borrow_mut().input.borrow_mut() = final_addr;
@@ -175,11 +175,35 @@ fn alu(funct3: U32, funct7: U32, rs1: U32, shamt: U32, imm: U32) -> Option<U32> 
             0b000 => rs1 * imm, // MUL
             0b001 => Wrapping(((((rs1.0 as i32) as i64) * ((imm.0 as i32) as i64)) >> 32) as u32), // MULH
             0b010 => Wrapping(((((rs1.0 as i32) as i64) * (imm.0 as i64)) >> 32) as u32), // MULHSU
-            0b011 => Wrapping((((rs1.0 as i64) * (imm.0 as i64)) >> 32) as u32), // MULHU
-            0b100 => Wrapping(((rs1.0 as i32) / (imm.0 as i32)) as u32), // DIV
-            0b101 => rs1 / imm,                          // DIVU
-            0b110 => Wrapping(((rs1.0 as i32) % (imm.0 as i32)) as u32), // REM
-            0b111 => rs1 % imm, // REMU
+            0b011 => Wrapping((((rs1.0 as i64) * (imm.0 as i64)) >> 32) as u32),          // MULHU
+            0b100 => {
+                if imm == ZERO {
+                    MAX
+                } else {
+                    Wrapping(((rs1.0 as i32) / (imm.0 as i32)) as u32)
+                }
+            } // DIV
+            0b101 => {
+                if imm == ZERO {
+                    MAX
+                } else {
+                    rs1 / imm
+                }
+            } // DIVU
+            0b110 => {
+                if imm == ZERO {
+                    rs1
+                } else {
+                    Wrapping(((rs1.0 as i32) % (imm.0 as i32)) as u32)
+                }
+            } // REM
+            0b111 => {
+                if imm == ZERO {
+                    rs1
+                } else {
+                    rs1 % imm
+                }
+            } // REMU
             _ => None?,
         }
     } else {

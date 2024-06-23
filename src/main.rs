@@ -1,8 +1,10 @@
+use std::cell::RefMut;
 use crate::chips::cpu::CPU;
 use crate::chips::ram::RAM;
 use crate::chips::rom::ROM;
 use crate::chips::{Chip, U32};
 use std::num::Wrapping;
+use crate::chips::register_file::RegFile;
 
 mod chips;
 
@@ -21,10 +23,21 @@ fn main() {
 
     let mut cpu = CPU::new(ram, rom);
 
+    set_register(cpu.memory_access.reg_file.borrow_mut(), 10, Wrapping(255));
+    set_register(cpu.memory_access.reg_file.borrow_mut(), 11, Wrapping(4));
+
     for i in 1..10 {
         cpu.compute();
         cpu.clk();
         println!("cycle: {i}");
         cpu.memory_access.reg_file.borrow().print();
     }
+}
+
+fn set_register(mut reg_file: RefMut<RegFile<U32>>, idx: usize, value: U32) {
+    let reg = reg_file.get(idx);
+    *reg.input.borrow_mut() = value;
+    *reg.load.borrow_mut() = true;
+    reg.compute();
+    reg.clk();
 }

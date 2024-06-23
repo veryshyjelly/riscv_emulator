@@ -1,5 +1,5 @@
 use crate::chips::register::Register;
-use crate::chips::{wire, Chip, Wire, ONE, U32, ZERO};
+use crate::chips::{wire, Chip, Wire, FOUR, U32, ZERO};
 
 #[derive(Clone)]
 pub struct PC<T = U32> {
@@ -38,7 +38,7 @@ impl Chip for PC {
         } else if *self.load.borrow() {
             self.input.borrow().clone()
         } else if *self.inc.borrow() {
-            self.output.borrow().clone() + ONE
+            self.output.borrow().clone() + FOUR
         } else {
             self.output.borrow().clone()
         };
