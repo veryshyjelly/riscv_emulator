@@ -1,32 +1,35 @@
 use crate::chips::dff::DFF;
-use crate::chips::{mux2, Chip, Wire};
-use std::cell::RefCell;
+use crate::chips::{mux2, wire, Chip, Wire, ONE, U32};
 
 pub struct Decode {
-    pub input: Wire<u32>,
+    input: Wire<U32>,
     pub output: Wire<Instruction>,
+    // out stores the result of the current operation and transfers it to output at clk
     out: DFF<Instruction>,
 }
 
 impl Decode {
-    fn new(input: Wire<u32>, output: Wire<Instruction>) -> Self {
+    pub fn new(input: Wire<U32>, output: Wire<Instruction>) -> Self {
         Self {
             input,
             output: output.clone(),
-            out: DFF::new(RefCell::new(Instruction::default()), output),
+            // new dff with wire connected to Decode's output
+            out: DFF::new(wire(Instruction::default()), output),
         }
     }
 }
 
-fn bit_range(v: u32, msb: usize, lsb: usize) -> u32 {
-    let mask = (1u32 << (msb - lsb + 1)) - 1;
+fn bit_range(v: U32, msb: usize, lsb: usize) -> U32 {
+    let mask = (ONE << (msb - lsb + 1)) - ONE;
     (v >> lsb) & mask
 }
 
 impl Chip for Decode {
     fn compute(&mut self) {
         let inst = self.input.borrow().clone();
-        let neg = (inst >> 31) == 1;
+        println!("inst: {inst}");
+
+        let neg = (inst >> 31) == ONE;
 
         let imm_30_25 = bit_range(inst, 30, 25);
         let imm_24_21 = bit_range(inst, 24, 21);
@@ -48,11 +51,11 @@ impl Chip for Decode {
             rs2: bit_range(inst, 24, 20),
             funct3: bit_range(inst, 14, 12),
             funct7: bit_range(inst, 31, 25),
-            imm_i: mux2(imm_i, (!imm_i) + 1, neg),
-            imm_s: mux2(imm_s, (!imm_s) + 1, neg),
-            imm_b: mux2(imm_b, (!imm_b) + 1, neg),
-            imm_u: mux2(imm_u, (!imm_u) + 1, neg),
-            imm_j: mux2(imm_j, (!imm_j) + 1, neg),
+            imm_i: mux2(imm_i, (!imm_i) + ONE, neg),
+            imm_s: mux2(imm_s, (!imm_s) + ONE, neg),
+            imm_b: mux2(imm_b, (!imm_b) + ONE, neg),
+            imm_u: mux2(imm_u, (!imm_u) + ONE, neg),
+            imm_j: mux2(imm_j, (!imm_j) + ONE, neg),
             shamtw: bit_range(inst, 24, 20),
             opcode: bit_range(inst, 6, 0),
         };
@@ -61,12 +64,13 @@ impl Chip for Decode {
     }
 
     fn clk(&mut self) {
+        // show the effect to the world
         self.out.clk();
     }
 }
 
-#[derive(Default, Clone)]
-pub struct Instruction<T = u32> {
+#[derive(Default, Clone, Debug)]
+pub struct Instruction<T = U32> {
     pub rd: T,     // "rd", 11:7
     pub rs1: T,    // "rs1", 19:15
     pub rs2: T,    // "rs2", 24:20

@@ -1,6 +1,7 @@
 use crate::chips::{Chip, Wire};
 
 /**Equivalent to reg data type in verilog*/
+#[derive(Clone)]
 pub struct DFF<T> {
     pub input: Wire<T>,
     pub output: Wire<T>,

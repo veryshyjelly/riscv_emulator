@@ -1,7 +1,7 @@
 use crate::chips::rom::ROM;
-use crate::chips::{Chip, Wire};
+use crate::chips::{Chip, Wire, U32};
 
-struct Fetch<T = u32> {
+pub struct Fetch<T = U32> {
     pub instruction: Wire<T>,
     pub pc: Wire<T>,
     rom: ROM<T>,
@@ -12,7 +12,7 @@ where
     T: Copy,
 {
     // Give the loaded rom to fetch
-    fn new(pc: Wire<T>, rom: ROM<T>) -> Self {
+    pub fn new(pc: Wire<T>, rom: ROM<T>) -> Self {
         Self {
             instruction: rom.output.clone(),
             pc,
@@ -21,7 +21,7 @@ where
     }
 }
 
-impl Chip for Fetch<u32> {
+impl Chip for Fetch<U32> {
     fn compute(&mut self) {
         // set the address of rom
         *self.rom.address.borrow_mut() = self.pc.borrow().clone();

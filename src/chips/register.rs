@@ -1,7 +1,7 @@
 use crate::chips::dff::DFF;
-use crate::chips::{mux2, Chip, Wire};
-use std::cell::RefCell;
+use crate::chips::{mux2, wire, Chip, Wire};
 
+#[derive(Clone)]
 pub struct Register<T> {
     pub input: Wire<T>,
     pub output: Wire<T>,
@@ -28,13 +28,14 @@ where
     T: Clone + Default,
 {
     fn default() -> Self {
-        let out_wire = RefCell::new(T::default());
-        let in_wire = RefCell::new(T::default());
+        // The default register with required connections
+        let out_wire = wire(T::default());
+        let in_wire = wire(T::default());
         let dff = DFF::new(in_wire.clone(), out_wire.clone());
         Self {
             input: in_wire,
             output: out_wire,
-            load: RefCell::new(false),
+            load: wire(false),
             dff,
         }
     }

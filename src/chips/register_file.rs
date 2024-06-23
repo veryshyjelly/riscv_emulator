@@ -3,7 +3,9 @@
 
 use crate::chips::register::Register;
 use crate::chips::Chip;
+use std::fmt::Debug;
 
+#[derive(Clone)]
 pub struct RegFile<T> {
     registers: Vec<Register<T>>,
 }
@@ -30,13 +32,20 @@ where
 
 impl<T> Chip for RegFile<T>
 where
-    T: Copy + Default,
+    T: Copy + Default + Debug,
 {
     fn compute(&mut self) {
         self.registers.iter_mut().for_each(|v| v.compute())
     }
 
     fn clk(&mut self) {
-        self.registers.iter_mut().for_each(|v| v.clk())
+        self.registers.iter_mut().for_each(|v| {
+            v.clk();
+            *v.load.borrow_mut() = false;
+        });
+        self.registers
+            .iter()
+            .enumerate()
+            .for_each(|(i, v)| println!("x{i}: {:?}", v.output.borrow().clone()));
     }
 }
