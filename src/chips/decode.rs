@@ -1,16 +1,17 @@
 use crate::chips::dff::DFF;
+use crate::chips::rom::ROM;
 use crate::chips::{mux2, wire, Chip, Wire, ONE, U32, ZERO};
 use std::num::Wrapping;
 
 pub struct Decode<T = U32> {
-    pub input: Wire<T>,
+    pub input: Wire<ROM<T>>,
     pub output: Wire<Instruction<T>>,
     // out stores the result of the current operation and transfers it to output at clk
     out: DFF<Instruction<T>>,
 }
 
 impl Decode {
-    pub fn new(input: Wire<U32>, output: Wire<Instruction>) -> Self {
+    pub fn new(input: Wire<ROM<U32>>, output: Wire<Instruction>) -> Self {
         Self {
             input,
             output: output.clone(),
@@ -201,7 +202,7 @@ impl Decode {
 
 impl Chip for Decode {
     fn compute(&mut self) {
-        let inst = self.input.borrow().clone();
+        let inst = self.input.borrow().output.borrow().clone();
         // println!("fetch inst: {inst:032b}");
 
         *self.out.input.borrow_mut() = self.decode(inst);

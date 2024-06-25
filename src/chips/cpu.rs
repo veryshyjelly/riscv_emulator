@@ -18,10 +18,17 @@ impl CPU {
     pub fn new(ram: RAM<U32>, rom: ROM) -> Self {
         let pc = wire(PC::default());
         let reg_file = wire(RegFile::new(32));
+        let rom = wire(rom);
 
-        let fetch = Fetch::new(pc.borrow().output.clone(), rom);
-        let decode = Decode::new(fetch.instruction.clone(), wire(Instruction::default()));
-        let execute = Execute::new(decode.output.clone(), ram, reg_file.clone(), pc.clone());
+        let fetch = Fetch::new(pc.borrow().output.clone(), rom.clone());
+        let decode = Decode::new(rom.clone(), wire(Instruction::default()));
+        let execute = Execute::new(
+            decode.output.clone(),
+            ram,
+            rom,
+            reg_file.clone(),
+            pc.clone(),
+        );
 
         Self {
             fetch,

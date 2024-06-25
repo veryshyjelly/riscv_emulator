@@ -3,6 +3,7 @@ use crate::chips::pc::PC;
 use crate::chips::ram::RAM;
 use crate::chips::register::Register;
 use crate::chips::register_file::RegFile;
+use crate::chips::rom::ROM;
 use crate::chips::{mux2, Chip, Wire, FOUR, ONE, U32, ZERO};
 use std::io;
 use std::io::Read;
@@ -13,6 +14,7 @@ pub struct Execute<T = U32> {
     pub input: Wire<Instruction<T>>,
     pub reg_file: Wire<RegFile<T>>,
     pub ram: RAM<T>,
+    rom: Wire<ROM<T>>,
     pc: Wire<PC<T>>,
     rd: T, // this is the affected register value is stored to target it at clk
     halt: usize,
@@ -29,6 +31,7 @@ impl Execute {
     pub fn new(
         input: Wire<Instruction>,
         ram: RAM<U32>,
+        rom: Wire<ROM>,
         reg_file: Wire<RegFile<U32>>,
         pc: Wire<PC>,
     ) -> Self {
@@ -36,6 +39,7 @@ impl Execute {
         Self {
             input,
             ram,
+            rom,
             reg_file,
             pc,
             rd: ZERO,
@@ -176,8 +180,9 @@ impl Execute {
             ECALL => {
                 self.rd = Wrapping(10);
                 let a7 = reg_file.get(17).output.borrow().clone();
+                let a1 = reg_file.get(11).output.borrow().clone();
                 let a0 = reg_file.get(10);
-                ecall(a7, a0);
+                ecall(a7, a0, a1, self.rom.clone());
             }
             EBREAK => {
                 println!("ebreak not implemented yet")
@@ -211,7 +216,7 @@ impl Chip for Execute {
     }
 }
 
-fn ecall(a7: U32, a0: &mut Register<U32>) {
+fn ecall(a7: U32, a0: &mut Register<U32>, a1: U32, rom: Wire<ROM>) {
     // handle syscall
     match a7.0 {
         1 => {
@@ -230,7 +235,17 @@ fn ecall(a7: U32, a0: &mut Register<U32>) {
             // read string
         }
         4 => {
+            // should be encoded as lui no op 
+            // lui x0, `data`
             // print string
+            let mut string = vec![];
+            let a0 = a0.output.borrow().clone();
+            for i in 0..a1.0 {
+                let val = rom.borrow().peek(a0 + Wrapping(4*i));
+                string.push((val.0 >> 12) as u8);
+            }
+            print!("{}", String::from_utf8_lossy(&string))
+
         }
         10 => {
             let val = a0.output.borrow().clone();

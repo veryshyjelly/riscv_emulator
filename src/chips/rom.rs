@@ -25,6 +25,10 @@ where
             .enumerate()
             .for_each(|(i, p)| self.registers[i] = p);
     }
+
+    pub fn peek(&self, addr: U32) -> T {
+        self.registers[addr.0 as usize >> 2].clone()
+    }
 }
 
 impl Chip for ROM<U32> {
