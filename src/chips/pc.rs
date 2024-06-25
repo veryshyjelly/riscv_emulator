@@ -20,13 +20,13 @@ impl PC {
         inc: Wire<bool>,
         output: Wire<U32>,
     ) -> Self {
+        // connect the output of the register to pc's output
         Self {
             input,
             reset,
             load,
             inc,
             output: output.clone(),
-            // connect the output of the register to pc's output
             register: Register::new(wire(ZERO), output, wire(true)),
         }
     }

@@ -1,5 +1,5 @@
 use crate::chips::decode::{Decode, Instruction};
-use crate::chips::execute::{Execute};
+use crate::chips::execute::Execute;
 use crate::chips::fetch::Fetch;
 use crate::chips::pc::PC;
 use crate::chips::ram::RAM;
@@ -21,12 +21,7 @@ impl CPU {
 
         let fetch = Fetch::new(pc.borrow().output.clone(), rom);
         let decode = Decode::new(fetch.instruction.clone(), wire(Instruction::default()));
-        let execute = Execute::new(
-            decode.output.clone(),
-            ram,
-            reg_file.clone(),
-            pc.clone(),
-        );
+        let execute = Execute::new(decode.output.clone(), ram, reg_file.clone(), pc.clone());
 
         Self {
             fetch,

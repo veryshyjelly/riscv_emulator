@@ -191,7 +191,7 @@ impl Chip for Execute {
     // #[rustfmt::skip]
     fn compute(&mut self) {
         let instruction = self.input.borrow().clone();
-        println!("decoded instruction: {:?}", instruction);
+        // println!("decoded instruction: {:?}", instruction);
 
         if self.halt != 0 {
             println!("halted");
@@ -215,14 +215,22 @@ fn ecall(a7: U32, a0: &mut Register<U32>) {
     // handle syscall
     match a7.0 {
         1 => {
-            let val = a0.output.borrow().clone();
-            print!("{}", String::from_utf8_lossy(&[val.0 as u8]))
-        }
-        2 => {
+            // read char
             let mut buf = [0; 1];
             io::stdin().read_exact(&mut buf).unwrap();
             *a0.input.borrow_mut() = Wrapping(buf[0] as u32);
             *a0.load.borrow_mut() = true;
+        }
+        2 => {
+            // print char
+            let val = a0.output.borrow().clone();
+            print!("{}", String::from_utf8_lossy(&[val.0 as u8]))
+        }
+        3 => {
+            // read string
+        }
+        4 => {
+            // print string
         }
         10 => {
             let val = a0.output.borrow().clone();

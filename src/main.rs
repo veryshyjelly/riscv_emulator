@@ -12,8 +12,31 @@ fn main() {
 
     rom.load(
         [
-            0x0FF00513, 0x00400593, 0x00058A63, 0x02B572B3, 0x00058533, 0x000285B3, 0xFE0008E3,
-            0x7CA03823, 0x00000513, 0x00A00893, 0x00000073,
+        		0x00200893,
+        		0x04800513,
+        		0x00000073,
+        		0x06500513,
+        		0x00000073,
+        		0x06C00513,
+        		0x00000073,
+        		0x00000073,
+        		0x06F00513,
+        		0x00000073,
+        		0x02000513,
+        		0x00000073,
+        		0x05700513,
+        		0x00000073,
+        		0x06F00513,
+        		0x00000073,
+        		0x07200513,
+        		0x00000073,
+        		0x06C00513,
+        		0x00000073,
+        		0x06400513,
+        		0x00000073,
+        		0x00000513,
+        		0x00A00893,
+        		0x00000073,
         ]
         .map(|x: u32| Wrapping(x))
         .into_iter()
@@ -27,9 +50,8 @@ fn main() {
         i += 1;
         cpu.compute();
         cpu.clk();
-        println!("cycle: {i}");
-        println!("ram[2000] = {}", cpu.execute.ram.peek(Wrapping(2000)));
+        // println!("cycle: {i}");
+        // println!("ram[2000] = {}", cpu.execute.ram.peek(Wrapping(2000)));
         // cpu.memory_access.reg_file.borrow().print();
     }
-    
 }

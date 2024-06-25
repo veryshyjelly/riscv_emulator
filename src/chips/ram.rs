@@ -1,6 +1,6 @@
-use std::fmt::Debug;
 use crate::chips::register::Register;
 use crate::chips::{Chip, Wire, U32, ZERO};
+use std::fmt::Debug;
 
 pub struct RAM<T> {
     pub input: Wire<T>,

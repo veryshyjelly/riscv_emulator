@@ -202,7 +202,7 @@ impl Decode {
 impl Chip for Decode {
     fn compute(&mut self) {
         let inst = self.input.borrow().clone();
-        println!("fetch inst: {inst:032b}");
+        // println!("fetch inst: {inst:032b}");
 
         *self.out.input.borrow_mut() = self.decode(inst);
         self.out.compute(); // compute karna na bhule
