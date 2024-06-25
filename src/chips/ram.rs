@@ -1,5 +1,5 @@
 use crate::chips::register::Register;
-use crate::chips::{wire, Chip, Wire, U32, ZERO};
+use crate::chips::{Chip, Wire, U32};
 
 pub struct RAM<T> {
     pub input: Wire<T>,
@@ -13,17 +13,23 @@ impl<T> RAM<T>
 where
     T: Default + Clone,
 {
-    pub fn new(size: usize) -> Self {
+    pub fn new(
+        input: Wire<T>,
+        output: Wire<T>,
+        address: Wire<U32>,
+        load: Wire<bool>,
+        size: usize,
+    ) -> Self {
         // Create the specified number of registers
         let mut registers = Vec::with_capacity(size);
         for _ in 0..size {
             registers.push(Register::default());
         }
         Self {
-            input: wire(T::default()),
-            output: wire(T::default()),
-            address: wire(ZERO),
-            load: wire(false),
+            input,
+            output,
+            address,
+            load,
             registers,
         }
     }

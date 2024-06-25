@@ -18,13 +18,7 @@ pub struct CPU<T = U32> {
 
 impl CPU {
     pub fn new(ram: RAM<U32>, rom: ROM) -> Self {
-        let pc = wire(PC::new(
-            wire(ZERO),
-            wire(false),
-            wire(false),
-            wire(true),
-            wire(ZERO),
-        ));
+        let pc = wire(PC::default());
         let reg_file = wire(RegFile::new(32));
 
         let fetch = Fetch::new(pc.borrow().output.clone(), rom);

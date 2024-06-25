@@ -1,5 +1,5 @@
 use crate::chips::register::Register;
-use crate::chips::{Chip};
+use crate::chips::Chip;
 use std::fmt::Debug;
 
 #[derive(Clone)]

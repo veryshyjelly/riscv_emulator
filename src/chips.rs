@@ -26,16 +26,16 @@ pub trait Chip {
 
 type Wire<T> = Rc<RefCell<T>>;
 
-fn wire<T>(t: T) -> Wire<T> {
+pub fn wire<T>(t: T) -> Wire<T> {
     Rc::new(RefCell::new(t))
 }
 
 pub type U32 = Wrapping<u32>;
 
-const ZERO: U32 = Wrapping(0);
-const ONE: U32 = Wrapping(1);
-const FOUR: U32 = Wrapping(4);
-const MAX: U32 = Wrapping(u32::MAX);
+pub const ZERO: U32 = Wrapping(0);
+pub const ONE: U32 = Wrapping(1);
+pub const FOUR: U32 = Wrapping(4);
+pub const MAX: U32 = Wrapping(u32::MAX);
 
 fn mux2<T>(a: T, b: T, sel: bool) -> T {
     match sel {

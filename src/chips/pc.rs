@@ -11,6 +11,7 @@ pub struct PC<T = U32> {
     register: Register<T>,
 }
 
+#[allow(dead_code)]
 impl PC {
     pub fn new(
         input: Wire<U32>,
@@ -26,6 +27,20 @@ impl PC {
             inc,
             output: output.clone(),
             // connect the output of the register to pc's output
+            register: Register::new(wire(ZERO), output, wire(true)),
+        }
+    }
+}
+
+impl Default for PC {
+    fn default() -> Self {
+        let output = wire(ZERO);
+        Self {
+            input: wire(ZERO),
+            reset: wire(false),
+            load: wire(false),
+            inc: wire(true),
+            output: output.clone(),
             register: Register::new(wire(ZERO), output, wire(true)),
         }
     }

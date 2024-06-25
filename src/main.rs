@@ -1,16 +1,16 @@
-use std::cell::RefMut;
 use crate::chips::cpu::CPU;
 use crate::chips::ram::RAM;
-use crate::chips::rom::ROM;
-use crate::chips::{Chip, U32};
-use std::num::Wrapping;
 use crate::chips::register_file::RegFile;
+use crate::chips::rom::ROM;
+use crate::chips::{wire, Chip, U32, ZERO};
+use std::cell::RefMut;
+use std::num::Wrapping;
 
 mod chips;
 
 fn main() {
-    let ram: RAM<U32> = RAM::new(1024 * 1024);
-    let mut rom = ROM::new(1024);
+    let ram: RAM<U32> = RAM::new(wire(ZERO), wire(ZERO), wire(ZERO), wire(false), 1024 * 1024);
+    let mut rom = ROM::new(wire(ZERO), wire(ZERO), 1024);
 
     rom.load(
         [

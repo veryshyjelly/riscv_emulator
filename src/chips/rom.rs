@@ -1,21 +1,24 @@
-use crate::chips::{wire, Chip, Wire, U32, ZERO};
+use crate::chips::{Chip, Wire, U32};
 
 pub struct ROM<T = U32> {
-    pub output: Wire<T>,
     pub address: Wire<T>,
+    pub output: Wire<T>,
     registers: Vec<T>,
 }
 
-impl ROM<U32> {
-    pub fn new(size: usize) -> Self {
+impl<T> ROM<T>
+where
+    T: Default + Clone,
+{
+    pub fn new(output: Wire<T>, address: Wire<T>, size: usize) -> Self {
         Self {
-            output: wire(ZERO),
-            address: wire(ZERO),
-            registers: vec![ZERO; size],
+            output,
+            address,
+            registers: vec![T::default(); size],
         }
     }
 
-    pub fn load(&mut self, program: Vec<U32>) {
+    pub fn load(&mut self, program: Vec<T>) {
         // load the program into the rom
         program
             .into_iter()

@@ -1,5 +1,5 @@
 use crate::chips::dff::DFF;
-use crate::chips::{mux2, wire, Chip, Wire, ONE, U32};
+use crate::chips::{mux2, wire, Chip, Wire, ONE, U32, ZERO};
 
 pub struct Decode<T = U32> {
     pub input: Wire<T>,
@@ -27,7 +27,7 @@ fn bit_range(v: U32, msb: usize, lsb: usize) -> U32 {
 impl Chip for Decode {
     fn compute(&mut self) {
         let inst = self.input.borrow().clone();
-        println!("inst: {inst}");
+        println!("fetch inst: {inst}");
 
         let neg = (inst >> 31) == ONE;
 
@@ -44,20 +44,156 @@ impl Chip for Decode {
         let imm_b = imm_7 << 11 | imm_30_25 << 5 | imm_11_8 << 1;
         let imm_u = imm_30_20 << 20 | imm_19_12 << 12;
         let imm_j = imm_19_12 << 12 | imm_20 << 11 | imm_30_25 << 5 | imm_24_21 << 1;
+        let imm_i = mux2(imm_i, (!imm_i) + ONE, neg);
+        let imm_s = mux2(imm_s, (!imm_s) + ONE, neg);
+        let imm_b = mux2(imm_b, (!imm_b) + ONE, neg);
+        let imm_u = mux2(imm_u, (!imm_u) + ONE, neg);
+        let imm_j = mux2(imm_j, (!imm_j) + ONE, neg);
+
+        let shamtw = bit_range(inst, 24, 20);
+        let funct3 = bit_range(inst, 14, 12);
+        let funct7 = bit_range(inst, 31, 25);
+        let rd = bit_range(inst, 11, 7);
+        let rs1 = bit_range(inst, 19, 15);
+        let rs2 = bit_range(inst, 24, 20);
+        let opcode = bit_range(inst, 6, 0);
+        let imm;
+
+        use Operation::*;
+        let op = match opcode.0 {
+            0b0110011 => {
+                imm = ZERO;
+                // OP
+                if funct7 == ZERO {
+                    match funct3.0 {
+                        0b000 => ADD,
+                        0b001 => SLL,
+                        0b010 => SLT,
+                        0b011 => SLTU,
+                        0b100 => XOR,
+                        0b101 => SRL,
+                        0b110 => OR,
+                        0b111 => AND,
+                        _ => panic!("invalid funct3 {funct3} for op"),
+                    }
+                } else if funct7.0 == 0b0100000 {
+                    match funct3.0 {
+                        0b000 => SUB,
+                        0b101 => SRA,
+                        _ => panic!("invalid funct3 {funct3} for op"),
+                    }
+                } else if funct7.0 == 0b0000001 {
+                    match funct3.0 {
+                        0b000 => MUL,
+                        0b001 => MULH,
+                        0b010 => MULHSU,
+                        0b011 => MULHU,
+                        0b100 => DIV,
+                        0b101 => DIVU,
+                        0b110 => REM,
+                        0b111 => REMU,
+                        _ => panic!("invalid funct3 {funct3} for op"),
+                    }
+                } else {
+                    panic!("not recognized {funct7}")
+                }
+            }
+            0b0010011 => {
+                // OP-IMM
+                imm = imm_i;
+                if funct7 == ZERO {
+                    match funct3.0 {
+                        0b000 => ADDI,
+                        0b010 => SLTI,
+                        0b011 => SLTIU,
+                        0b100 => XORI,
+                        0b101 => SRLI,
+                        0b110 => ORI,
+                        0b111 => ANDI,
+                        _ => panic!("invalid funct3 {funct3} for op"),
+                    }
+                } else if funct7.0 == 0b0100000 {
+                    match funct3.0 {
+                        0b101 => SRA,
+                        _ => panic!("invalid funct3 {funct3} for op"),
+                    }
+                } else {
+                    panic!("not recognized {funct7}")
+                }
+            }
+            0b0110111 => {
+                imm = imm_u;
+                LUI
+            }
+            0b0010111 => {
+                imm = imm_u;
+                AUIPC
+            }
+            0b1101111 => {
+                imm = imm_j;
+                JAL
+            }
+            0b1100111 => {
+                imm = imm_i;
+                JALR
+            }
+            0b1100011 => {
+                // BRANCH
+                imm = imm_b;
+                match funct3.0 {
+                    0b000 => BEQ,
+                    0b001 => BNE,
+                    0b100 => BLT,
+                    0b101 => BGE,
+                    0b110 => BLTU,
+                    0b111 => BGEU,
+                    _ => panic!("invalid instruction"),
+                }
+            }
+            0b0000011 => {
+                // LOAD
+                imm = imm_i;
+                match funct3.0 {
+                    0b000 => LB,
+                    0b001 => LH,
+                    0b010 => LW,
+                    0b100 => LBU,
+                    0b101 => LHU,
+                    _ => LW,
+                }
+            }
+            0b0100011 => {
+                // STORE
+                imm = imm_s;
+                match funct3.0 {
+                    0b000 => SB,
+                    0b001 => SH,
+                    0b010 => SW,
+                    _ => SW,
+                }
+            }
+            0b1110011 => {
+                // SYSTEM
+                imm = ZERO;
+                match funct7.0 {
+                    0 => ECALL,
+                    1 => EBREAK,
+                    _ => panic!("invalid instruction"),
+                }
+            }
+            _ => {
+                imm = ZERO;
+                ADDI
+            }
+        };
 
         *self.out.input.borrow_mut() = Instruction {
-            rd: bit_range(inst, 11, 7),
-            rs1: bit_range(inst, 19, 15),
-            rs2: bit_range(inst, 24, 20),
-            funct3: bit_range(inst, 14, 12),
-            funct7: bit_range(inst, 31, 25),
-            imm_i: mux2(imm_i, (!imm_i) + ONE, neg),
-            imm_s: mux2(imm_s, (!imm_s) + ONE, neg),
-            imm_b: mux2(imm_b, (!imm_b) + ONE, neg),
-            imm_u: mux2(imm_u, (!imm_u) + ONE, neg),
-            imm_j: mux2(imm_j, (!imm_j) + ONE, neg),
-            shamtw: bit_range(inst, 24, 20),
-            opcode: bit_range(inst, 6, 0),
+            rd,
+            rs1,
+            rs2,
+            imm,
+            shamtw,
+            op,
         };
 
         self.out.compute(); // compute karna na bhule
@@ -71,16 +207,67 @@ impl Chip for Decode {
 
 #[derive(Default, Clone, Debug)]
 pub struct Instruction<T = U32> {
-    pub rd: T,     // "rd", 11:7
-    pub rs1: T,    // "rs1", 19:15
-    pub rs2: T,    // "rs2", 24:20
-    pub funct3: T, // "funct3", 14:12
-    pub funct7: T, // "funct7", 31:25
-    pub imm_i: T,  // "imm_i", 31...30:25,24:21,20
-    pub imm_s: T,  // "imm_s", 31...30:25,11:8,7
-    pub imm_b: T,  // "imm_b", 31...7,30:25,11:8
-    pub imm_u: T,  // "imm_u", 31,30:20,19:12,0...
-    pub imm_j: T,  // "imm_j",
+    pub rd: T,  // "rd", 11:7
+    pub rs1: T, // "rs1", 19:15
+    pub rs2: T, // "rs2", 24:20
+    pub imm: T,
     pub shamtw: T, // "shamtw", 24:20
-    pub opcode: T, // "opcode", 6:0
+    pub op: Operation,
+}
+
+#[derive(Clone, Debug)]
+pub enum Operation {
+    LUI,
+    AUIPC,
+    JAL,
+    JALR,
+    BEQ,
+    BNE,
+    BLT,
+    BGE,
+    BLTU,
+    BGEU,
+    LB,
+    LH,
+    LW,
+    LBU,
+    LHU,
+    SB,
+    SH,
+    SW,
+    ADDI,
+    SLTI,
+    SLTIU,
+    XORI,
+    ORI,
+    ANDI,
+    SLLI,
+    SRLI,
+    SRAI,
+    ADD,
+    SUB,
+    SLL,
+    SLT,
+    SLTU,
+    XOR,
+    SRL,
+    SRA,
+    OR,
+    AND,
+    MUL,
+    MULH,
+    MULHSU,
+    MULHU,
+    DIV,
+    DIVU,
+    REM,
+    REMU,
+    ECALL,
+    EBREAK,
+}
+
+impl Default for Operation {
+    fn default() -> Self {
+        Operation::ADDI
+    }
 }

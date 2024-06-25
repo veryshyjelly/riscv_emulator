@@ -1,9 +1,13 @@
-use crate::chips::decode::Instruction;
+use crate::chips::decode::{Instruction, Operation};
 use crate::chips::dff::DFF;
 use crate::chips::pc::PC;
+use crate::chips::register::Register;
 use crate::chips::register_file::RegFile;
 use crate::chips::{mux2, wire, Chip, Wire, FOUR, MAX, ONE, U32, ZERO};
+use std::io;
+use std::io::Read;
 use std::num::Wrapping;
+use std::process::exit;
 
 pub struct Execute<T = U32> {
     pub input: Wire<Instruction<T>>,
@@ -11,7 +15,7 @@ pub struct Execute<T = U32> {
     pub reg_file: Wire<RegFile<T>>,
     pc: Wire<PC<T>>,
     out: DFF<IOCode<T>>, // stores the value before outputting it
-    rd: U32,             // this is the affected register value is stored to target it at clk
+    rd: T,               // this is the affected register value is stored to target it at clk
 }
 
 #[derive(Default, Clone, Debug)]
@@ -28,12 +32,12 @@ impl Execute {
         reg_file: Wire<RegFile<U32>>,
         pc: Wire<PC>,
     ) -> Self {
+        // connect the DFF output to Execute output interface
         Self {
             input,
             output: output.clone(),
             reg_file,
             pc,
-            // connect the dff's output to execute's output interface
             out: DFF::new(wire(IOCode::default()), output),
             rd: ZERO,
         }
@@ -41,12 +45,13 @@ impl Execute {
 }
 
 impl Chip for Execute {
+    // #[rustfmt::skip]
     fn compute(&mut self) {
         // start by resetting the output otherwise it will stick loading or storing
         *self.out.input.borrow_mut() = IOCode::default();
 
         let instruction = self.input.borrow().clone();
-        println!("instruction: {:?}", instruction);
+        println!("decoded instruction: {:?}", instruction);
 
         let mut reg_file = self.reg_file.borrow_mut();
         let rs1 = reg_file
@@ -63,81 +68,122 @@ impl Chip for Execute {
         // store the value of rd for future use
         self.rd = instruction.rd;
 
-        match instruction.opcode.0 {
-            OP => {
-                let result = alu(instruction.funct3, instruction.funct7, rs1, rs2, rs2)
-                    .expect(&format!("invalid instruction: {instruction:?}"));
-                *rd.input.borrow_mut() = result;
+        let imm = mux2(instruction.imm, rs2, rs2 != ZERO);
+        let shamt = mux2(instruction.shamtw, rs2, rs2 != ZERO);
+
+        use crate::chips::decode::Operation::*;
+
+        let pc_addr = self.pc.borrow().output.borrow().clone();
+        let target_addr = pc_addr + instruction.imm;
+
+        // Set the load bits accordingly
+        match instruction.op {
+            JAL | JALR => {
                 *rd.load.borrow_mut() = true;
+                *self.pc.borrow_mut().load.borrow_mut() = true
             }
-            OP_IMM => {
-                let result = alu(
-                    instruction.funct3,
-                    instruction.funct7,
-                    rs1,
-                    instruction.shamtw,
-                    instruction.imm_i,
-                )
-                .expect(&format!("invalid instruction: {instruction:?}"));
-                *rd.input.borrow_mut() = result;
-                *rd.load.borrow_mut() = true;
+            AUIPC | BEQ | BNE | BLT | BGE | BLTU | BGEU => {
+                *rd.load.borrow_mut() = false;
+                *self.pc.borrow_mut().load.borrow_mut() = true
             }
-            LUI => {
-                *rd.input.borrow_mut() = instruction.imm_u;
-                *rd.load.borrow_mut() = true;
+            LUI | ADDI | SLTI | SLTIU | XORI | ORI | ANDI | SLLI | SRLI | SRAI | ADD | SUB
+            | SLL | SLT | SLTU | XOR | SRL | SRA | OR | AND | MUL | MULH | MULHSU | MULHU | DIV
+            | DIVU | REM | REMU => *rd.load.borrow_mut() = true,
+            _ => {
+                *rd.load.borrow_mut() = false;
+                *self.pc.borrow_mut().load.borrow_mut() = false
             }
+        }
+
+        // ARITHMETIC and LOGIC INSTRUCTIONS
+        *rd.input.borrow_mut() = match instruction.op {
+            ADDI | ADD => rs1 + imm,
+            SLTI | SLT => mux2(ZERO, ONE, (rs1.0 as i32) < (imm.0 as i32)),
+            SLTIU | SLTU => mux2(ZERO, ONE, rs1 < imm),
+            XORI | XOR => rs1 ^ imm,
+            ORI | OR => rs1 | imm,
+            ANDI | AND => rs1 & imm,
+            SLLI | SLL => rs1 << shamt.0 as usize,
+            SRLI | SRL => rs1 >> shamt.0 as usize,
+            SRAI | SRA => Wrapping(((rs1.0 as i32) >> shamt.0) as u32),
+            SUB => rs1 - rs2,
+            MUL => rs1 * rs2,
+            MULH => Wrapping(((((rs1.0 as i32) as i64) * ((rs2.0 as i32) as i64)) >> 32) as u32),
+            MULHSU => Wrapping(((((rs1.0 as i32) as i64) * (rs2.0 as i64)) >> 32) as u32),
+            MULHU => Wrapping((((rs1.0 as i64) * (rs2.0 as i64)) >> 32) as u32),
+            DIV => Wrapping((rs1.0 as i32).checked_div(rs2.0 as i32).unwrap_or(i32::MAX) as u32),
+            DIVU => Wrapping(rs1.0.checked_div(rs2.0).unwrap_or(u32::MAX)),
+            REM => Wrapping(
+                (rs1.0 as i32)
+                    .checked_rem(rs2.0 as i32)
+                    .unwrap_or(rs1.0 as i32) as u32,
+            ),
+            REMU => Wrapping(rs1.0.checked_rem(rs2.0).unwrap_or(rs1.0)),
+            _ => ZERO,
+        };
+
+        // BRANCH INSTRUCTIONS
+        let final_addr = match instruction.op {
+            BEQ => mux2(pc_addr, target_addr, rs1 == rs2),
+            BNE => mux2(pc_addr, target_addr, rs1 != rs2),
+            BLT => mux2(pc_addr, target_addr, (rs1.0 as i32) < (rs2.0 as i32)),
+            BGE => mux2(pc_addr, target_addr, (rs1.0 as i32) >= (rs2.0 as i32)),
+            BLTU => mux2(pc_addr, target_addr, rs1 < rs2),
+            BGEU => mux2(pc_addr, target_addr, rs1 >= rs2),
+            _ => ZERO,
+        };
+        if final_addr % FOUR != ZERO {
+            panic!("address-misaligned")
+        }
+        *self.pc.borrow_mut().input.borrow_mut() = final_addr;
+
+        match instruction.op {
+            LUI => *rd.input.borrow_mut() = imm,
             AUIPC => {
                 *self.pc.borrow_mut().input.borrow_mut() =
-                    self.pc.borrow().output.borrow().clone() + instruction.imm_u;
-                *self.pc.borrow_mut().load.borrow_mut() = true;
+                    self.pc.borrow().output.borrow().clone() + imm
             }
             JAL => {
                 *rd.input.borrow_mut() = self.pc.borrow().output.borrow().clone() + FOUR;
-                *rd.load.borrow_mut() = true;
                 *self.pc.borrow_mut().input.borrow_mut() =
-                    self.pc.borrow().output.borrow().clone() + instruction.imm_j;
-                *self.pc.borrow_mut().load.borrow_mut() = true;
+                    self.pc.borrow().output.borrow().clone() + imm;
             }
             JALR => {
                 *rd.input.borrow_mut() = self.pc.borrow().output.borrow().clone() + FOUR;
-                *rd.load.borrow_mut() = true;
-                *self.pc.borrow_mut().input.borrow_mut() = (rs1 + instruction.imm_i >> 1) << 1;
-                *self.pc.borrow_mut().load.borrow_mut() = true;
+                *self.pc.borrow_mut().input.borrow_mut() = (rs1 + imm >> 1) << 1;
             }
-            BRANCH => {
-                let pc_addr = self.pc.borrow().output.borrow().clone();
-                let target_addr = pc_addr + instruction.imm_b;
-                let final_addr = match instruction.funct3.0 {
-                    0b000 => mux2(pc_addr, target_addr, rs1 == rs2), // BEQ
-                    0b001 => mux2(pc_addr, target_addr, rs1 != rs2), // BNE
-                    0b100 => mux2(pc_addr, target_addr, (rs1.0 as i32) < (rs2.0 as i32)), // BLT
-                    0b101 => mux2(pc_addr, target_addr, (rs1.0 as i32) >= (rs2.0 as i32)), // BGE
-                    0b110 => mux2(pc_addr, target_addr, rs1 < rs2),  // BLTU
-                    0b111 => mux2(pc_addr, target_addr, rs1 >= rs2), // BGEU
-                    _ => panic!("invalid instruction"),
-                };
-                if final_addr % FOUR != ZERO {
-                    panic!("address-misaligned")
-                }
-                *self.pc.borrow_mut().input.borrow_mut() = final_addr;
-            }
-            LOAD => {
+            LB | LH | LW | LBU | LHU => {
                 *self.out.input.borrow_mut() = IOCode {
-                    register: instruction.rd,
-                    address: rs1 + instruction.imm_i,
+                    register: self.rd,
+                    address: rs1 + imm,
                     store: false,
                 }
             }
-            STORE => {
+            SB | SH | SW => {
                 *self.out.input.borrow_mut() = IOCode {
                     register: instruction.rd,
-                    address: rs1 + instruction.imm_s,
+                    address: rs1 + imm,
                     store: true,
                 }
             }
             _ => {}
         }
+
         rd.compute();
+        // drop(rd);
+
+        match instruction.op {
+            ECALL => {
+                self.rd = Wrapping(10);
+                let a7 = self.reg_file.borrow_mut().get(17).output.borrow().clone();
+                let a0 = reg_file.get(10);
+                ecall(a7, a0);
+            }
+            EBREAK => {
+                println!("ebreak not implemented yet")
+            }
+            _ => {}
+        }
     }
 
     fn clk(&mut self) {
@@ -151,73 +197,22 @@ impl Chip for Execute {
     }
 }
 
-fn alu(funct3: U32, funct7: U32, rs1: U32, shamt: U32, imm: U32) -> Option<U32> {
-    let result = if funct7 == ZERO {
-        match funct3.0 {
-            0b000 => rs1 + imm,                                        // ADD
-            0b001 => rs1 << shamt.0 as usize,                          // SLL
-            0b010 => mux2(ZERO, ONE, (rs1.0 as i32) < (imm.0 as i32)), // SLT
-            0b011 => mux2(ZERO, ONE, rs1 < imm),                       // SLTU
-            0b100 => rs1 ^ imm,                                        // XOR
-            0b101 => rs1 >> shamt.0 as usize,                          // SRL
-            0b110 => rs1 | imm,                                        // OR
-            0b111 => rs1 & imm,                                        // AND
-            _ => None?,
+fn ecall(a7: U32, a0: &mut Register<U32>) {
+    match a7.0 {
+        1 => {
+            let val = a0.output.borrow().clone();
+            print!("{}", String::from_utf8_lossy(&[val.0 as u8]))
         }
-    } else if funct7.0 == 0b0100000 {
-        match funct3.0 {
-            0b000 => rs1 - imm,                                    // SUB
-            0b101 => Wrapping(((rs1.0 as i32) >> shamt.0) as u32), // SRA
-            _ => None?,
+        2 => {
+            let mut buf = [0; 1];
+            io::stdin().read_exact(&mut buf).unwrap();
+            *a0.input.borrow_mut() = Wrapping(buf[0] as u32);
+            *a0.load.borrow_mut() = true;
         }
-    } else if funct7.0 == 0b0000001 {
-        match funct3.0 {
-            0b000 => rs1 * imm, // MUL
-            0b001 => Wrapping(((((rs1.0 as i32) as i64) * ((imm.0 as i32) as i64)) >> 32) as u32), // MULH
-            0b010 => Wrapping(((((rs1.0 as i32) as i64) * (imm.0 as i64)) >> 32) as u32), // MULHSU
-            0b011 => Wrapping((((rs1.0 as i64) * (imm.0 as i64)) >> 32) as u32),          // MULHU
-            0b100 => {
-                if imm == ZERO {
-                    MAX
-                } else {
-                    Wrapping(((rs1.0 as i32) / (imm.0 as i32)) as u32)
-                }
-            } // DIV
-            0b101 => {
-                if imm == ZERO {
-                    MAX
-                } else {
-                    rs1 / imm
-                }
-            } // DIVU
-            0b110 => {
-                if imm == ZERO {
-                    rs1
-                } else {
-                    Wrapping(((rs1.0 as i32) % (imm.0 as i32)) as u32)
-                }
-            } // REM
-            0b111 => {
-                if imm == ZERO {
-                    rs1
-                } else {
-                    rs1 % imm
-                }
-            } // REMU
-            _ => None?,
+        9 => {
+            let val = a0.output.borrow().clone();
+            exit(val.0 as i32)
         }
-    } else {
-        panic!("not recognized {funct7}")
-    };
-    Some(result)
+        _ => {}
+    }
 }
-
-const OP: u32 = 0b0110011;
-const OP_IMM: u32 = 0b0010011;
-const LUI: u32 = 0b0110111;
-const AUIPC: u32 = 0b0010111;
-const JAL: u32 = 0b1101111;
-const JALR: u32 = 0b1100111;
-const BRANCH: u32 = 0b1100011;
-const LOAD: u32 = 0b0000011;
-const STORE: u32 = 0b0100011;
