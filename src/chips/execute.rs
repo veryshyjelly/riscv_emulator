@@ -1,4 +1,5 @@
 use crate::chips::decode::Instruction;
+use crate::chips::decode::Operation::{ADD, AND, OR, SLL, SLT, SLTU, SRA, SRL, XOR};
 use crate::chips::pc::PC;
 use crate::chips::ram::RAM;
 use crate::chips::register::Register;
@@ -65,14 +66,21 @@ impl Execute {
             .clone();
         let rd = reg_file.get(instruction.rd.0 as usize);
 
-        let imm = mux2(instruction.imm, rs2, rs2 != ZERO);
-        let shamt = mux2(instruction.shamtw, rs2, rs2 != ZERO);
+        use crate::chips::decode::Operation::*;
+
+        let imm = match instruction.op {
+            ADD | SLT | SLTU | XOR | OR | AND | SLL | SRL | SRA => rs2,
+            _ => instruction.imm,
+        };
+        let shamt = match instruction.op {
+            ADD | SLT | SLTU | XOR | OR | AND | SLL | SRL | SRA => rs2,
+            _ => instruction.shamtw,
+        };
 
         let pc_addr = self.pc.borrow().output.borrow().clone();
         let target_addr = pc_addr + instruction.imm - FOUR - FOUR;
 
         // Set the load bits accordingly
-        use crate::chips::decode::Operation::*;
         match instruction.op {
             JAL | JALR => {
                 *rd.load.borrow_mut() = true;
@@ -178,7 +186,6 @@ impl Execute {
 
         match instruction.op {
             ECALL => {
-                self.rd = Wrapping(10);
                 let a7 = reg_file.get(17).output.borrow().clone();
                 let a1 = reg_file.get(11).output.borrow().clone();
                 let a0 = reg_file.get(10);
@@ -199,7 +206,7 @@ impl Chip for Execute {
         // println!("decoded instruction: {:?}", instruction);
 
         if self.halt != 0 {
-            println!("halted");
+            // println!("halted");
             self.halt -= 1;
             return;
         }
@@ -210,7 +217,6 @@ impl Chip for Execute {
         // Get the register that got updated
         let mut reg_file = self.reg_file.borrow_mut();
         let rd = reg_file.get(self.rd.0 as usize);
-
         // Clock the register and self output
         rd.clk();
     }
@@ -225,6 +231,8 @@ fn ecall(a7: U32, a0: &mut Register<U32>, a1: U32, rom: Wire<ROM>) {
             io::stdin().read_exact(&mut buf).unwrap();
             *a0.input.borrow_mut() = Wrapping(buf[0] as u32);
             *a0.load.borrow_mut() = true;
+            a0.compute();
+            a0.clk();
         }
         2 => {
             // print char
@@ -235,17 +243,16 @@ fn ecall(a7: U32, a0: &mut Register<U32>, a1: U32, rom: Wire<ROM>) {
             // read string
         }
         4 => {
-            // should be encoded as lui no op 
+            // should be encoded as lui no op
             // lui x0, `data`
             // print string
             let mut string = vec![];
             let a0 = a0.output.borrow().clone();
             for i in 0..a1.0 {
-                let val = rom.borrow().peek(a0 + Wrapping(4*i));
+                let val = rom.borrow().peek(a0 + Wrapping(4 * i));
                 string.push((val.0 >> 12) as u8);
             }
             print!("{}", String::from_utf8_lossy(&string))
-
         }
         10 => {
             let val = a0.output.borrow().clone();
