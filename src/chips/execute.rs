@@ -1,9 +1,9 @@
-use crate::chips::decode::{Instruction, Operation};
-use crate::chips::dff::DFF;
+use crate::chips::decode::Instruction;
 use crate::chips::pc::PC;
+use crate::chips::ram::RAM;
 use crate::chips::register::Register;
 use crate::chips::register_file::RegFile;
-use crate::chips::{mux2, wire, Chip, Wire, FOUR, MAX, ONE, U32, ZERO};
+use crate::chips::{mux2, Chip, Wire, FOUR, ONE, U32, ZERO};
 use std::io;
 use std::io::Read;
 use std::num::Wrapping;
@@ -11,11 +11,11 @@ use std::process::exit;
 
 pub struct Execute<T = U32> {
     pub input: Wire<Instruction<T>>,
-    pub output: Wire<IOCode<T>>,
     pub reg_file: Wire<RegFile<T>>,
+    pub ram: RAM<T>,
     pc: Wire<PC<T>>,
-    out: DFF<IOCode<T>>, // stores the value before outputting it
-    rd: T,               // this is the affected register value is stored to target it at clk
+    rd: T, // this is the affected register value is stored to target it at clk
+    halt: usize,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -28,32 +28,27 @@ pub struct IOCode<T = U32> {
 impl Execute {
     pub fn new(
         input: Wire<Instruction>,
-        output: Wire<IOCode>,
+        ram: RAM<U32>,
         reg_file: Wire<RegFile<U32>>,
         pc: Wire<PC>,
     ) -> Self {
         // connect the DFF output to Execute output interface
         Self {
             input,
-            output: output.clone(),
+            ram,
             reg_file,
             pc,
-            out: DFF::new(wire(IOCode::default()), output),
             rd: ZERO,
+            halt: 0,
         }
     }
-}
 
-impl Chip for Execute {
-    // #[rustfmt::skip]
-    fn compute(&mut self) {
-        // start by resetting the output otherwise it will stick loading or storing
-        *self.out.input.borrow_mut() = IOCode::default();
-
-        let instruction = self.input.borrow().clone();
-        println!("decoded instruction: {:?}", instruction);
+    fn execute(&mut self, instruction: Instruction) {
+        // store the value of rd for future use
+        self.rd = instruction.rd;
 
         let mut reg_file = self.reg_file.borrow_mut();
+
         let rs1 = reg_file
             .get(instruction.rs1.0 as usize)
             .output
@@ -65,18 +60,15 @@ impl Chip for Execute {
             .borrow()
             .clone();
         let rd = reg_file.get(instruction.rd.0 as usize);
-        // store the value of rd for future use
-        self.rd = instruction.rd;
 
         let imm = mux2(instruction.imm, rs2, rs2 != ZERO);
         let shamt = mux2(instruction.shamtw, rs2, rs2 != ZERO);
 
-        use crate::chips::decode::Operation::*;
-
         let pc_addr = self.pc.borrow().output.borrow().clone();
-        let target_addr = pc_addr + instruction.imm;
+        let target_addr = pc_addr + instruction.imm - FOUR - FOUR;
 
         // Set the load bits accordingly
+        use crate::chips::decode::Operation::*;
         match instruction.op {
             JAL | JALR => {
                 *rd.load.borrow_mut() = true;
@@ -86,9 +78,12 @@ impl Chip for Execute {
                 *rd.load.borrow_mut() = false;
                 *self.pc.borrow_mut().load.borrow_mut() = true
             }
-            LUI | ADDI | SLTI | SLTIU | XORI | ORI | ANDI | SLLI | SRLI | SRAI | ADD | SUB
-            | SLL | SLT | SLTU | XOR | SRL | SRA | OR | AND | MUL | MULH | MULHSU | MULHU | DIV
-            | DIVU | REM | REMU => *rd.load.borrow_mut() = true,
+            LB | LH | LW | LBU | LHU | LUI | ADDI | SLTI | SLTIU | XORI | ORI | ANDI | SLLI
+            | SRLI | SRAI | ADD | SUB | SLL | SLT | SLTU | XOR | SRL | SRA | OR | AND | MUL
+            | MULH | MULHSU | MULHU | DIV | DIVU | REM | REMU => {
+                *rd.load.borrow_mut() = true;
+                *self.pc.borrow_mut().load.borrow_mut() = false
+            }
             _ => {
                 *rd.load.borrow_mut() = false;
                 *self.pc.borrow_mut().load.borrow_mut() = false
@@ -130,52 +125,57 @@ impl Chip for Execute {
             BGE => mux2(pc_addr, target_addr, (rs1.0 as i32) >= (rs2.0 as i32)),
             BLTU => mux2(pc_addr, target_addr, rs1 < rs2),
             BGEU => mux2(pc_addr, target_addr, rs1 >= rs2),
-            _ => ZERO,
+            _ => pc_addr,
         };
         if final_addr % FOUR != ZERO {
             panic!("address-misaligned")
         }
+        if pc_addr != final_addr {
+            self.halt = 2;
+        }
         *self.pc.borrow_mut().input.borrow_mut() = final_addr;
 
+        let imm = instruction.imm;
         match instruction.op {
             LUI => *rd.input.borrow_mut() = imm,
             AUIPC => {
-                *self.pc.borrow_mut().input.borrow_mut() =
-                    self.pc.borrow().output.borrow().clone() + imm
+                *self.pc.borrow_mut().input.borrow_mut() = pc_addr + imm - FOUR - FOUR;
+                self.halt = 2;
             }
             JAL => {
-                *rd.input.borrow_mut() = self.pc.borrow().output.borrow().clone() + FOUR;
+                *rd.input.borrow_mut() = pc_addr - FOUR;
                 *self.pc.borrow_mut().input.borrow_mut() =
-                    self.pc.borrow().output.borrow().clone() + imm;
+                    self.pc.borrow().output.borrow().clone() + instruction.imm - FOUR - FOUR;
+                self.halt = 2;
             }
             JALR => {
-                *rd.input.borrow_mut() = self.pc.borrow().output.borrow().clone() + FOUR;
+                *rd.input.borrow_mut() = pc_addr - FOUR;
                 *self.pc.borrow_mut().input.borrow_mut() = (rs1 + imm >> 1) << 1;
+                self.halt = 2;
             }
             LB | LH | LW | LBU | LHU => {
-                *self.out.input.borrow_mut() = IOCode {
-                    register: self.rd,
-                    address: rs1 + imm,
-                    store: false,
-                }
+                *self.ram.address.borrow_mut() = rs1 + imm;
+                *self.ram.load.borrow_mut() = false;
+                self.ram.compute();
+                self.ram.clk();
+                *rd.input.borrow_mut() = self.ram.output.borrow().clone();
             }
             SB | SH | SW => {
-                *self.out.input.borrow_mut() = IOCode {
-                    register: instruction.rd,
-                    address: rs1 + imm,
-                    store: true,
-                }
+                *self.ram.address.borrow_mut() = rs1 + imm;
+                *self.ram.load.borrow_mut() = true;
+                *self.ram.input.borrow_mut() = rs2;
+                self.ram.compute();
+                self.ram.clk();
             }
             _ => {}
         }
 
         rd.compute();
-        // drop(rd);
 
         match instruction.op {
             ECALL => {
                 self.rd = Wrapping(10);
-                let a7 = self.reg_file.borrow_mut().get(17).output.borrow().clone();
+                let a7 = reg_file.get(17).output.borrow().clone();
                 let a0 = reg_file.get(10);
                 ecall(a7, a0);
             }
@@ -185,6 +185,21 @@ impl Chip for Execute {
             _ => {}
         }
     }
+}
+
+impl Chip for Execute {
+    // #[rustfmt::skip]
+    fn compute(&mut self) {
+        let instruction = self.input.borrow().clone();
+        println!("decoded instruction: {:?}", instruction);
+
+        if self.halt != 0 {
+            println!("halted");
+            self.halt -= 1;
+            return;
+        }
+        self.execute(instruction)
+    }
 
     fn clk(&mut self) {
         // Get the register that got updated
@@ -193,11 +208,11 @@ impl Chip for Execute {
 
         // Clock the register and self output
         rd.clk();
-        self.out.clk();
     }
 }
 
 fn ecall(a7: U32, a0: &mut Register<U32>) {
+    // handle syscall
     match a7.0 {
         1 => {
             let val = a0.output.borrow().clone();
@@ -209,7 +224,7 @@ fn ecall(a7: U32, a0: &mut Register<U32>) {
             *a0.input.borrow_mut() = Wrapping(buf[0] as u32);
             *a0.load.borrow_mut() = true;
         }
-        9 => {
+        10 => {
             let val = a0.output.borrow().clone();
             exit(val.0 as i32)
         }

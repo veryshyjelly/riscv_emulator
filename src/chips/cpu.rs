@@ -1,18 +1,16 @@
 use crate::chips::decode::{Decode, Instruction};
-use crate::chips::execute::{Execute, IOCode};
+use crate::chips::execute::{Execute};
 use crate::chips::fetch::Fetch;
-use crate::chips::memory_access::MemoryAccess;
 use crate::chips::pc::PC;
 use crate::chips::ram::RAM;
 use crate::chips::register_file::RegFile;
 use crate::chips::rom::ROM;
-use crate::chips::{wire, Chip, Wire, U32, ZERO};
+use crate::chips::{wire, Chip, Wire, U32};
 
 pub struct CPU<T = U32> {
     pub fetch: Fetch<T>,
     pub decode: Decode<T>,
     pub execute: Execute<T>,
-    pub memory_access: MemoryAccess<T>,
     pc: Wire<PC>,
 }
 
@@ -25,17 +23,15 @@ impl CPU {
         let decode = Decode::new(fetch.instruction.clone(), wire(Instruction::default()));
         let execute = Execute::new(
             decode.output.clone(),
-            wire(IOCode::default()),
+            ram,
             reg_file.clone(),
             pc.clone(),
         );
-        let memory_access = MemoryAccess::new(execute.output.clone(), reg_file, ram);
 
         Self {
             fetch,
             decode,
             execute,
-            memory_access,
             pc,
         }
     }
@@ -46,7 +42,6 @@ impl Chip for CPU {
         self.fetch.compute();
         self.decode.compute();
         self.execute.compute();
-        self.memory_access.compute();
         self.pc.borrow_mut().compute();
     }
 
@@ -54,7 +49,6 @@ impl Chip for CPU {
         self.fetch.clk();
         self.decode.clk();
         self.execute.clk();
-        self.memory_access.clk();
         self.pc.borrow_mut().clk();
     }
 }

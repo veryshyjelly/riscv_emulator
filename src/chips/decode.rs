@@ -1,5 +1,6 @@
 use crate::chips::dff::DFF;
 use crate::chips::{mux2, wire, Chip, Wire, ONE, U32, ZERO};
+use std::num::Wrapping;
 
 pub struct Decode<T = U32> {
     pub input: Wire<T>,
@@ -24,12 +25,12 @@ fn bit_range(v: U32, msb: usize, lsb: usize) -> U32 {
     (v >> lsb) & mask
 }
 
-impl Chip for Decode {
-    fn compute(&mut self) {
-        let inst = self.input.borrow().clone();
-        println!("fetch inst: {inst}");
-
+impl Decode {
+    fn decode(&self, inst: U32) -> Instruction {
         let neg = (inst >> 31) == ONE;
+        let ones_21 = Wrapping((0xFFFFF8 << 8) as u32);
+        let ones_20 = Wrapping((0xFFFFF << 12) as u32);
+        let ones_12 = Wrapping((0xFFF << 20) as u32);
 
         let imm_30_25 = bit_range(inst, 30, 25);
         let imm_24_21 = bit_range(inst, 24, 21);
@@ -44,11 +45,11 @@ impl Chip for Decode {
         let imm_b = imm_7 << 11 | imm_30_25 << 5 | imm_11_8 << 1;
         let imm_u = imm_30_20 << 20 | imm_19_12 << 12;
         let imm_j = imm_19_12 << 12 | imm_20 << 11 | imm_30_25 << 5 | imm_24_21 << 1;
-        let imm_i = mux2(imm_i, (!imm_i) + ONE, neg);
-        let imm_s = mux2(imm_s, (!imm_s) + ONE, neg);
-        let imm_b = mux2(imm_b, (!imm_b) + ONE, neg);
-        let imm_u = mux2(imm_u, (!imm_u) + ONE, neg);
-        let imm_j = mux2(imm_j, (!imm_j) + ONE, neg);
+        let imm_i = mux2(imm_i, imm_i | ones_21, neg);
+        let imm_s = mux2(imm_s, imm_s | ones_21, neg);
+        let imm_b = mux2(imm_b, imm_b | ones_20, neg);
+        let imm_u = mux2(imm_u, imm_u | (ONE << 31), neg);
+        let imm_j = mux2(imm_j, imm_j | ones_12, neg);
 
         let shamtw = bit_range(inst, 24, 20);
         let funct3 = bit_range(inst, 14, 12);
@@ -101,24 +102,24 @@ impl Chip for Decode {
             0b0010011 => {
                 // OP-IMM
                 imm = imm_i;
-                if funct7 == ZERO {
-                    match funct3.0 {
-                        0b000 => ADDI,
-                        0b010 => SLTI,
-                        0b011 => SLTIU,
-                        0b100 => XORI,
-                        0b101 => SRLI,
-                        0b110 => ORI,
-                        0b111 => ANDI,
-                        _ => panic!("invalid funct3 {funct3} for op"),
+                match funct3.0 {
+                    0b000 => ADDI,
+                    0b001 => SLLI,
+                    0b010 => SLTI,
+                    0b011 => SLTIU,
+                    0b100 => XORI,
+                    0b101 => {
+                        if funct7 == ZERO {
+                            SRLI
+                        } else if funct7.0 == 0b0100000 {
+                            SRAI
+                        } else {
+                            panic!("not recognized {funct7}")
+                        }
                     }
-                } else if funct7.0 == 0b0100000 {
-                    match funct3.0 {
-                        0b101 => SRA,
-                        _ => panic!("invalid funct3 {funct3} for op"),
-                    }
-                } else {
-                    panic!("not recognized {funct7}")
+                    0b110 => ORI,
+                    0b111 => ANDI,
+                    _ => panic!("invalid funct3 {funct3} for op-imm"),
                 }
             }
             0b0110111 => {
@@ -187,15 +188,23 @@ impl Chip for Decode {
             }
         };
 
-        *self.out.input.borrow_mut() = Instruction {
+        Instruction {
             rd,
             rs1,
             rs2,
             imm,
             shamtw,
             op,
-        };
+        }
+    }
+}
 
+impl Chip for Decode {
+    fn compute(&mut self) {
+        let inst = self.input.borrow().clone();
+        println!("fetch inst: {inst:032b}");
+
+        *self.out.input.borrow_mut() = self.decode(inst);
         self.out.compute(); // compute karna na bhule
     }
 
