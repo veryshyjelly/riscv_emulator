@@ -7,12 +7,13 @@ pub mod decode;
 pub mod dff;
 pub mod execute;
 pub mod fetch;
-pub mod memory_access;
+pub mod memory;
 pub mod pc;
 pub mod ram;
 pub mod register;
 pub mod register_file;
 pub mod rom;
+pub mod screen;
 
 /**
    For sequential circuits the chip trait should be implemented

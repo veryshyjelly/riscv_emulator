@@ -1,5 +1,6 @@
 use crate::chips::{Chip, Wire};
 
+/**Modelling a D-Flip-Flop */
 /**Equivalent to reg data type in verilog*/
 #[derive(Clone)]
 pub struct DFF<T> {

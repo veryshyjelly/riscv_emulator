@@ -1,8 +1,12 @@
+use chips::screen::Screen;
+
 use crate::chips::cpu::CPU;
 use crate::chips::ram::RAM;
 use crate::chips::rom::ROM;
 use crate::chips::{wire, Chip, U32, ZERO};
 use std::num::Wrapping;
+use std::ops::{Deref, DerefMut};
+use std::thread;
 
 mod chips;
 
@@ -22,7 +26,9 @@ fn main() {
         .collect::<Vec<_>>(),
     );
 
-    let mut cpu = CPU::new(ram, rom);
+    let screen = Screen::new(wire(ZERO), wire(ZERO));
+
+    let mut cpu = CPU::new(ram, rom, screen);
 
     // let mut i = 0;
     loop {

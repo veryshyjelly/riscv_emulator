@@ -1,7 +1,5 @@
 use crate::chips::decode::Instruction;
-use crate::chips::decode::Operation::{ADD, AND, OR, SLL, SLT, SLTU, SRA, SRL, XOR};
 use crate::chips::pc::PC;
-use crate::chips::ram::RAM;
 use crate::chips::register::Register;
 use crate::chips::register_file::RegFile;
 use crate::chips::rom::ROM;
@@ -11,10 +9,12 @@ use std::io::Read;
 use std::num::Wrapping;
 use std::process::exit;
 
+use super::memory::Memory;
+
 pub struct Execute<T = U32> {
     pub input: Wire<Instruction<T>>,
     pub reg_file: Wire<RegFile<T>>,
-    pub ram: RAM<T>,
+    pub memory: Memory<T>,
     rom: Wire<ROM<T>>,
     pc: Wire<PC<T>>,
     rd: T, // this is the affected register value is stored to target it at clk
@@ -31,7 +31,7 @@ pub struct IOCode<T = U32> {
 impl Execute {
     pub fn new(
         input: Wire<Instruction>,
-        ram: RAM<U32>,
+        memory: Memory<U32>,
         rom: Wire<ROM>,
         reg_file: Wire<RegFile<U32>>,
         pc: Wire<PC>,
@@ -39,7 +39,7 @@ impl Execute {
         // connect the DFF output to Execute output interface
         Self {
             input,
-            ram,
+            memory,
             rom,
             reg_file,
             pc,
@@ -166,18 +166,18 @@ impl Execute {
                 self.halt = 2;
             }
             LB | LH | LW | LBU | LHU => {
-                *self.ram.address.borrow_mut() = rs1 + imm;
-                *self.ram.load.borrow_mut() = false;
-                self.ram.compute();
-                self.ram.clk();
-                *rd.input.borrow_mut() = self.ram.output.borrow().clone();
+                *self.memory.address.borrow_mut() = rs1 + imm;
+                *self.memory.load.borrow_mut() = false;
+                self.memory.compute();
+                self.memory.clk();
+                *rd.input.borrow_mut() = self.memory.output.borrow().clone();
             }
             SB | SH | SW => {
-                *self.ram.address.borrow_mut() = rs1 + imm;
-                *self.ram.load.borrow_mut() = true;
-                *self.ram.input.borrow_mut() = rs2;
-                self.ram.compute();
-                self.ram.clk();
+                *self.memory.address.borrow_mut() = rs1 + imm;
+                *self.memory.load.borrow_mut() = true;
+                *self.memory.input.borrow_mut() = rs2;
+                self.memory.compute();
+                self.memory.clk();
             }
             _ => {}
         }

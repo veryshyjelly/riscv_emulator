@@ -7,6 +7,10 @@ use crate::chips::register_file::RegFile;
 use crate::chips::rom::ROM;
 use crate::chips::{wire, Chip, Wire, U32};
 
+use super::memory::Memory;
+use super::screen::Screen;
+use super::ZERO;
+
 pub struct CPU<T = U32> {
     pub fetch: Fetch<T>,
     pub decode: Decode<T>,
@@ -15,16 +19,17 @@ pub struct CPU<T = U32> {
 }
 
 impl CPU {
-    pub fn new(ram: RAM<U32>, rom: ROM) -> Self {
+    pub fn new(ram: RAM<U32>, rom: ROM, screen: Screen) -> Self {
         let pc = wire(PC::default());
         let reg_file = wire(RegFile::new(32));
         let rom = wire(rom);
+        let memory = Memory::new(wire(ZERO), wire(ZERO), wire(false), screen, ram);
 
         let fetch = Fetch::new(pc.borrow().output.clone(), rom.clone());
         let decode = Decode::new(rom.clone(), wire(Instruction::default()));
         let execute = Execute::new(
             decode.output.clone(),
-            ram,
+            memory,
             rom,
             reg_file.clone(),
             pc.clone(),

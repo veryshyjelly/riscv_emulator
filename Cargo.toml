@@ -4,3 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+pixels = "0.14.0"
+log = "0.4"
+fltk = { version = "1.4.34", features = ["rwh05"] }
+error-iter = "0.4"
