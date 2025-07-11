@@ -21,13 +21,6 @@ pub struct Execute<T = U32> {
     halt: usize,
 }
 
-#[derive(Default, Clone, Debug)]
-pub struct IOCode<T = U32> {
-    pub register: T,
-    pub address: T,
-    pub store: bool,
-}
-
 impl Execute {
     pub fn new(
         input: Wire<Instruction>,

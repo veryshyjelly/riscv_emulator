@@ -26,12 +26,12 @@ where
         &mut self.registers[index]
     }
 
-    pub fn print(&self) {
-        self.registers
-            .iter()
-            .enumerate()
-            .for_each(|(i, v)| println!("x{i}: {:?}", v.output.borrow().clone()));
-    }
+    // pub fn print(&self) {
+    //     self.registers
+    //         .iter()
+    //         .enumerate()
+    //         .for_each(|(i, v)| println!("x{i}: {:?}", v.output.borrow().clone()));
+    // }
 }
 
 impl<T> Chip for RegFile<T>

@@ -5,9 +5,6 @@ use crate::chips::ram::RAM;
 use crate::chips::rom::ROM;
 use crate::chips::{wire, Chip, U32, ZERO};
 use std::num::Wrapping;
-use std::ops::{Deref, DerefMut};
-use std::thread;
-
 mod chips;
 
 fn main() {

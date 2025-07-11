@@ -37,9 +37,9 @@ where
         }
     }
 
-    pub fn peek(&self, addr: U32) -> T {
-        self.registers[addr.0 as usize >> 2].output.borrow().clone()
-    }
+    // pub fn peek(&self, addr: U32) -> T {
+    //     self.registers[addr.0 as usize >> 2].output.borrow().clone()
+    // }
 }
 
 impl<T> Chip for RAM<T>

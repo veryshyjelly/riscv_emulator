@@ -1,4 +1,4 @@
-use super::{ram::RAM, screen::Screen, Chip, Wire, U32, ZERO};
+use super::{ram::RAM, screen::Screen, Chip, Wire, U32};
 use std::num::Wrapping;
 
 pub struct Memory<T> {
